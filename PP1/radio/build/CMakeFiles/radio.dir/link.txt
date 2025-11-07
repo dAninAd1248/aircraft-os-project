@@ -1,0 +1,1 @@
+/usr/bin/cc -Wl,--dependency-file=CMakeFiles/radio.dir/link.d CMakeFiles/radio.dir/src/main.c.o -o radio  -lm
