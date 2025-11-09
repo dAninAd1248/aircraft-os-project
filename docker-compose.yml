@@ -1,0 +1,9 @@
+services:
+  tester:
+    build: .
+    volumes:
+      - ./:/workspace:cached
+    working_dir: /workspace/PP1/test
+    tty: true
+    stdin_open: true
+    command: tail -f /dev/null
