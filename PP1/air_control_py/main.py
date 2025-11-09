@@ -13,7 +13,7 @@ STRIPS = 5
 shm_data = []
 
 # TODO1: Size of shared memory for 3 integers (current process pid, radio, ground) use ctypes.sizeof()
-SHM_LENGTH = 3
+SHM_LENGTH = 3 * (ctypes.sizeof(ctypes.c_int))
 
 # Global variables and locks
 planes = 0  # planes waiting
@@ -25,21 +25,32 @@ def create_shared_memory():
     """Create shared memory segment for PID exchange"""
     # TODO 6:
     # 1. Encode (utf-8) the shared memory name to use with shm_open
-    name = "shmMem"
-    name = name.encode() #utf-8 is the default method
+    name = "/shmMem"
+    name = name.encode("utf-8") #utf-8 is the default method
     # 2. Temporarily adjust the permission mask (umask) so the memory can be created with appropriate permissions
     umask = os.umask(777)
 
     # 3. Use _libc.shm_open to create the shared memory
-    fd = _libc.shm_open(name, O_RDONLY, 0777)
+    fd = _libc.shm_open(name, os.O_RDONLY, 0o660)
+    if(fd == -1):
+        err = ctypes.errno()
+        raise OSError(err, f"shm_open failed: {os.strerror(err)}")
     # 4. Use _libc.ftruncate to set the size of the shared memory (SHM_LENGTH)
-    _libc.ftruncate(fd, SHM_LENGTH)
+    if (_libc.ftruncate(fd, SHM_LENGTH) == -1):
+        err = ctypes.errno()
+        raise OSError(err, f"ftruncate failed: {os.strerror(err)}")
     # 5. Restore the original permission mask (umask)
     umask = os.umask(umask)
     # 6. Use mmap to map the shared memory
-    map = mmap.mmap(0,SHM_LENGTH, PROT_READ, MAP_SHARED,fd,0)
+    map = mmap.mmap(0,SHM_LENGTH, mmap.PROT_READ, mmap.MAP_SHARED,fd,0)
     # 7. Create an integer-array view (use memoryview()) to access the shared memory
+    view = memoryview(map)
+    if(len(view) != 3):
+        map.close()
+        os.close(fd)
+        raise RuntimeError(f"Expected a length of 3, got {len(view)} elements")
     # 8. Return the file descriptor (shm_open), mmap object and memory view
+    return view
 
 
 
@@ -53,6 +64,7 @@ def HandleUSR2(signum, frame):
 
 
 def TakeOffFunction(agent_id: int):
+    
     """Function executed by each THREAD to control takeoffs.
     Complete using runway1_lock and runway2_lock and state_lock to synchronize"""
     global planes, takeoffs, total_takeoffs
@@ -92,10 +104,10 @@ def TakeOffFunction(agent_id: int):
             runway2_lock.release()
     if(total_takeoffs >= TOTAL_TAKEOFFS):
         # Send SIGTERM when the total takeoffs target is reached
+        # os.kill(pid, signal.SIGTERM)
+        pass
+    
 
-
-        
-    return None
 
 
 def launch_radio():
