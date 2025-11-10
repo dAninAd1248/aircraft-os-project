@@ -1,24 +1,132 @@
+// Ground control: produce and manage plane traffic, signal radio to forward to air_control.
+
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #define PLANES_LIMIT 20
+
 int planes = 0;
 int takeoffs = 0;
-int traffic = 0;
+static int overloaded_state = 0; // 0: normal, 1: overload reported
+
+int shm_fd = -1;
+int* sh_memory = NULL;
+
+void SigTermHandler(int signum) {
+  (void)signum;
+  if (shm_fd != -1) close(shm_fd);
+  printf("[ground] SIGTERM received pid=%d, finalization of operations...\n", getpid());
+  fflush(stdout);
+  exit(0);
+}
+
+void SigUsr1Handler(int signum) {
+  (void)signum;
+  takeoffs += 5;
+  printf("[ground] SIGUSR1 received: takeoffs+=5 -> takeoffs=%d (before reducing planes)\n", takeoffs);
+  fflush(stdout);
+  // Reflect that 5 planes have taken off
+  if (planes >= 5) {
+    planes -= 5;
+  } else {
+    planes = 0;
+  }
+  if (planes < 10) {
+    overloaded_state = 0; // reset overload when below threshold
+  }
+  printf("[ground] after processing takeoffs: planes=%d\n", planes);
+  fflush(stdout);
+}
 
 void Traffic(int signum) {
-  // TODO:
-  // Calculate the number of waiting planes.
-  // Check if there are 10 or more waiting planes to send a signal and increment
-  // planes. Ensure signals are sent and planes are incremented only if the
-  // total number of planes has not been exceeded.
+  (void)signum;
+  // Check overload (print once per crossing)
+  if (planes >= 10) {
+    if (!overloaded_state) {
+      printf("RUNWAY OVERLOADED (ground pid=%d, planes=%d)\n", getpid(), planes);
+      fflush(stdout);
+      overloaded_state = 1;
+    }
+  } else if (overloaded_state) {
+    overloaded_state = 0;
+  }
+
+  if (planes < PLANES_LIMIT) {
+    int add = 5;
+    if (planes + add > PLANES_LIMIT) add = PLANES_LIMIT - planes;
+    if (add > 0) {
+      int before = planes;
+      planes += add;
+      printf("[ground] Traffic: added %d planes (before=%d after=%d)\n", add, before, planes);
+      fflush(stdout);
+      // send SIGUSR2 to radio so radio forwards to air_control
+      if (sh_memory && sh_memory[1] > 0) {
+        printf("[ground] sending SIGUSR2 to radio pid=%d\n", sh_memory[1]);
+        fflush(stdout);
+        kill(sh_memory[1], SIGUSR2);
+      } else {
+        printf("[ground] no radio pid in shm to send SIGUSR2 (sh_memory[1]=%d)\n", sh_memory ? sh_memory[1] : 0);
+        fflush(stdout);
+      }
+    }
+  }
 }
 
 int main(int argc, char* argv[]) {
-  // TODO:
-  // 1. Open the shared memory block and store this process PID in position 2
-  //    of the memory block.
-  // 3. Configure SIGTERM and SIGUSR1 handlers
-  //    - The SIGTERM handler should: close the shared memory, print
-  //      "finalization of operations..." and terminate the program.
-  //    - The SIGUSR1 handler should: increase the number of takeoffs by 5.
-  // 2. Configure the timer to execute the Traffic function.
+  const char* name = "/shm_pids_";
+
+  // Try to open the shared memory created by air_control. Retry a few times
+  // to avoid a race where ground starts slightly before air_control creates it.
+  int attempts = 0;
+  while ((shm_fd = shm_open(name, O_RDWR, 0666)) == -1 && attempts < 50) {
+    attempts++;
+    usleep(100000); // 100ms
+  }
+  if (shm_fd == -1) {
+    perror("shm_open ground");
+    fprintf(stderr, "ground: failed to open shared memory after %d attempts\n", attempts);
+    return 1;
+  }
+
+  sh_memory = mmap(NULL, sizeof(int) * 3, PROT_READ | PROT_WRITE, MAP_SHARED,
+                   shm_fd, 0);
+  if (sh_memory == MAP_FAILED) {
+    perror("mmap ground");
+    close(shm_fd);
+    return 1;
+  }
+
+  // Store our PID in position 2
+  sh_memory[2] = getpid();
+
+  // Configure signal handlers
+  signal(SIGTERM, SigTermHandler);
+  signal(SIGUSR1, SigUsr1Handler);
+  signal(SIGALRM, Traffic);
+
+  // Configure periodic timer every 500ms
+  struct itimerval timer;
+  timer.it_interval.tv_sec = 0;
+  timer.it_interval.tv_usec = 500000; // 500 ms
+  timer.it_value.tv_sec = 0;
+  timer.it_value.tv_usec = 500000; // first trigger
+
+  if (setitimer(ITIMER_REAL, &timer, NULL) == -1) {
+    perror("setitimer");
+    return 1;
+  }
+
+  // Loop until terminated
+  while (1) pause();
+
+  return 0;
 }

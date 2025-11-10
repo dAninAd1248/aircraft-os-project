@@ -5,6 +5,7 @@ RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
         ca-certificates \
         build-essential \
+        cmake \
         make \
         git \
         util-linux \

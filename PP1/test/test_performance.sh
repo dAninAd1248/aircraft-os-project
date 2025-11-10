@@ -1,4 +1,4 @@
-l#!/bin/bash
+#!/bin/bash
 
 echo "===================================="
 echo "::::::AIRPORT OPERATION TESTS:::::::"
@@ -238,5 +238,6 @@ else
     echo -e "${RED} Tests passed: $PASSED_TESTS/$TOTAL_TESTS"
     echo -e "${RED} Percentage: $PERCENTAGE%"
     echo "❌ DEFICIENT - Most rules failed"
+    echo -e "${NC}"
     exit 2
 fi
