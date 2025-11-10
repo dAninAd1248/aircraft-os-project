@@ -1,5 +1,6 @@
 #include "../include/functions.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
@@ -10,7 +11,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <errno.h>
 
 int planes = 0;
 int takeoffs = 0;
@@ -68,7 +68,7 @@ void SigHandler2(int signal) {
 
 void* TakeOffsFunction(void* arg) {
   (void)arg;
-  int have_runway = 0; // 1 => runway1, 2 => runway2
+  int have_runway = 0;  // 1 => runway1, 2 => runway2
 
   while (1) {
     // Check termination condition safely
@@ -98,7 +98,8 @@ void* TakeOffsFunction(void* arg) {
       total_takeoffs += 1;
 
       // debug: log progress so test harness can detect progress
-      printf("[air_control] total_takeoffs=%d planes=%d takeoffs_local=%d\n", total_takeoffs, planes, takeoffs);
+      printf("[air_control] total_takeoffs=%d planes=%d takeoffs_local=%d\n",
+             total_takeoffs, planes, takeoffs);
       fflush(stdout);
 
       // Every 5 local takeoffs, inform radio with SIGUSR1
@@ -127,7 +128,10 @@ void* TakeOffsFunction(void* arg) {
     if (total_takeoffs >= TOTAL_TAKEOFFS) {
       // send SIGTERM to radio
       if (sh_memory && sh_memory[1] > 0) {
-        printf("[air_control] reached TOTAL_TAKEOFFS (%d), sending SIGTERM to radio pid=%d\n", total_takeoffs, sh_memory[1]);
+        printf(
+            "[air_control] reached TOTAL_TAKEOFFS (%d), sending SIGTERM to "
+            "radio pid=%d\n",
+            total_takeoffs, sh_memory[1]);
         fflush(stdout);
         kill(sh_memory[1], SIGTERM);
       }

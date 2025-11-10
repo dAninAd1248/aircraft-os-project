@@ -1,14 +1,14 @@
 
-#include "../include/functions.h"
-
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/wait.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include "../include/functions.h"
 
 int main() {
   // 1. Create shared memory and store our PID
@@ -30,22 +30,27 @@ int main() {
     // child: execute radio. Working directory when tests run expects radio at
     // ../radio/build/radio
     const char* radio_path = "../radio/build/radio";
-    // Ensure the radio executable has execute permissions (in case it's mounted without +x)
+    // Ensure the radio executable has execute permissions (in case it's mounted
+    // without +x)
     chmod(radio_path, 0755);
     execl(radio_path, "radio", SH_MEMORY_NAME, (char*)NULL);
     // if execl returns, it failed. Attempt to compile from source and retry.
     perror("execl radio");
     fflush(stderr);
-    fprintf(stderr, "[air_control] attempting to compile fallback radio from ../radio/src/main.c...\n");
+    fprintf(stderr,
+            "[air_control] attempting to compile fallback radio from "
+            "../radio/src/main.c...\n");
     fflush(stderr);
-    int rc = system("gcc -O2 -Wall -Wextra -o /tmp/radio_exec ../radio/src/main.c");
+    int rc =
+        system("gcc -O2 -Wall -Wextra -o /tmp/radio_exec ../radio/src/main.c");
     if (rc == 0) {
       chmod("/tmp/radio_exec", 0755);
       execl("/tmp/radio_exec", "radio", SH_MEMORY_NAME, (char*)NULL);
       // if still failing, report and exit
       perror("execl fallback radio");
     } else {
-      fprintf(stderr, "[air_control] gcc failed to build fallback radio (rc=%d)\n", rc);
+      fprintf(stderr,
+              "[air_control] gcc failed to build fallback radio (rc=%d)\n", rc);
     }
     _exit(1);
   }

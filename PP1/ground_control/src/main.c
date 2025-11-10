@@ -1,4 +1,5 @@
-// Ground control: produce and manage plane traffic, signal radio to forward to air_control.
+// Ground control: produce and manage plane traffic, signal radio to forward to
+// air_control.
 
 #include <errno.h>
 #include <fcntl.h>
@@ -16,8 +17,8 @@
 
 int planes = 0;
 int takeoffs = 0;
-static int overloaded_state = 0; // 0: normal, 1: overload reported
-static int sigusr2_sent = 0; // limit how many SIGUSR2 we send to radio (max 4)
+static int overloaded_state = 0;  // 0: normal, 1: overload reported
+static int sigusr2_sent = 0;  // limit how many SIGUSR2 we send to radio (max 4)
 
 int shm_fd = -1;
 int* sh_memory = NULL;
@@ -25,7 +26,8 @@ int* sh_memory = NULL;
 void SigTermHandler(int signum) {
   (void)signum;
   if (shm_fd != -1) close(shm_fd);
-  printf("[ground] SIGTERM received pid=%d, finalization of operations...\n", getpid());
+  printf("[ground] SIGTERM received pid=%d, finalization of operations...\n",
+         getpid());
   fflush(stdout);
   exit(0);
 }
@@ -33,7 +35,10 @@ void SigTermHandler(int signum) {
 void SigUsr1Handler(int signum) {
   (void)signum;
   takeoffs += 5;
-  printf("[ground] SIGUSR1 received: takeoffs+=5 -> takeoffs=%d (before reducing planes)\n", takeoffs);
+  printf(
+      "[ground] SIGUSR1 received: takeoffs+=5 -> takeoffs=%d (before reducing "
+      "planes)\n",
+      takeoffs);
   fflush(stdout);
   // Reflect that 5 planes have taken off
   if (planes >= 5) {
@@ -42,14 +47,16 @@ void SigUsr1Handler(int signum) {
     planes = 0;
   }
   if (planes < 10) {
-    overloaded_state = 0; // reset overload when below threshold
+    overloaded_state = 0;  // reset overload when below threshold
   }
   printf("[ground] after processing takeoffs: planes=%d\n", planes);
   fflush(stdout);
 
-  // Stop traffic once we've observed all 20 takeoffs to avoid inflating radio's plane count
+  // Stop traffic once we've observed all 20 takeoffs to avoid inflating radio's
+  // plane count
   if (takeoffs >= 20) {
-    // Cancel periodic timer so Traffic() stops adding planes and sending SIGUSR2
+    // Cancel periodic timer so Traffic() stops adding planes and sending
+    // SIGUSR2
     struct itimerval stop = {0};
     setitimer(ITIMER_REAL, &stop, NULL);
   }
@@ -57,14 +64,16 @@ void SigUsr1Handler(int signum) {
 
 void Traffic(int signum) {
   (void)signum;
-  // If we've already reached the target number of takeoffs, do not add more planes
+  // If we've already reached the target number of takeoffs, do not add more
+  // planes
   if (takeoffs >= 20) {
     return;
   }
   // Check overload (print once per crossing)
   if (planes >= 10) {
     if (!overloaded_state) {
-      printf("RUNWAY OVERLOADED (ground pid=%d, planes=%d)\n", getpid(), planes);
+      printf("RUNWAY OVERLOADED (ground pid=%d, planes=%d)\n", getpid(),
+             planes);
       fflush(stdout);
       overloaded_state = 1;
     }
@@ -78,7 +87,8 @@ void Traffic(int signum) {
     if (add > 0) {
       int before = planes;
       planes += add;
-      printf("[ground] Traffic: added %d planes (before=%d after=%d)\n", add, before, planes);
+      printf("[ground] Traffic: added %d planes (before=%d after=%d)\n", add,
+             before, planes);
       fflush(stdout);
       // send SIGUSR2 to radio so radio forwards to air_control
       if (sigusr2_sent < 4 && sh_memory && sh_memory[1] > 0) {
@@ -87,11 +97,14 @@ void Traffic(int signum) {
         kill(sh_memory[1], SIGUSR2);
         sigusr2_sent++;
       } else if (!(sh_memory && sh_memory[1] > 0)) {
-        printf("[ground] no radio pid in shm to send SIGUSR2 (sh_memory[1]=%d)\n", sh_memory ? sh_memory[1] : 0);
+        printf(
+            "[ground] no radio pid in shm to send SIGUSR2 (sh_memory[1]=%d)\n",
+            sh_memory ? sh_memory[1] : 0);
         fflush(stdout);
       } else {
         // Reached max number of SIGUSR2 sends; do not notify radio further
-        printf("[ground] max SIGUSR2 sends reached (%d), not notifying radio\n", sigusr2_sent);
+        printf("[ground] max SIGUSR2 sends reached (%d), not notifying radio\n",
+               sigusr2_sent);
         fflush(stdout);
       }
     }
@@ -106,11 +119,12 @@ int main(int argc, char* argv[]) {
   int attempts = 0;
   while ((shm_fd = shm_open(name, O_RDWR, 0666)) == -1 && attempts < 50) {
     attempts++;
-    usleep(100000); // 100ms
+    usleep(100000);  // 100ms
   }
   if (shm_fd == -1) {
     perror("shm_open ground");
-    fprintf(stderr, "ground: failed to open shared memory after %d attempts\n", attempts);
+    fprintf(stderr, "ground: failed to open shared memory after %d attempts\n",
+            attempts);
     return 1;
   }
 
@@ -133,9 +147,9 @@ int main(int argc, char* argv[]) {
   // Configure periodic timer every 500ms
   struct itimerval timer;
   timer.it_interval.tv_sec = 0;
-  timer.it_interval.tv_usec = 500000; // 500 ms
+  timer.it_interval.tv_usec = 500000;  // 500 ms
   timer.it_value.tv_sec = 0;
-  timer.it_value.tv_usec = 500000; // first trigger
+  timer.it_value.tv_usec = 500000;  // first trigger
 
   if (setitimer(ITIMER_REAL, &timer, NULL) == -1) {
     perror("setitimer");

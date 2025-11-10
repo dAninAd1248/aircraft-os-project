@@ -1,5 +1,5 @@
-#ifndef FUNCTIONS_H
-#define FUNCTIONS_H
+#ifndef AIR_CONTROL_C_INCLUDE_FUNCTIONS_H_
+#define AIR_CONTROL_C_INCLUDE_FUNCTIONS_H_
 
 #include <pthread.h>
 #include <signal.h>
@@ -22,5 +22,4 @@ void MemoryCreate();
 void SigHandler2(int signal);
 void* TakeOffsFunction(void* arg);
 
-#endif // FUNCTIONS_H
-
+#endif  // AIR_CONTROL_C_INCLUDE_FUNCTIONS_H_
