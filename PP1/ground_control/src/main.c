@@ -17,6 +17,7 @@
 int planes = 0;
 int takeoffs = 0;
 static int overloaded_state = 0; // 0: normal, 1: overload reported
+static int sigusr2_sent = 0; // limit how many SIGUSR2 we send to radio (max 4)
 
 int shm_fd = -1;
 int* sh_memory = NULL;
@@ -45,10 +46,21 @@ void SigUsr1Handler(int signum) {
   }
   printf("[ground] after processing takeoffs: planes=%d\n", planes);
   fflush(stdout);
+
+  // Stop traffic once we've observed all 20 takeoffs to avoid inflating radio's plane count
+  if (takeoffs >= 20) {
+    // Cancel periodic timer so Traffic() stops adding planes and sending SIGUSR2
+    struct itimerval stop = {0};
+    setitimer(ITIMER_REAL, &stop, NULL);
+  }
 }
 
 void Traffic(int signum) {
   (void)signum;
+  // If we've already reached the target number of takeoffs, do not add more planes
+  if (takeoffs >= 20) {
+    return;
+  }
   // Check overload (print once per crossing)
   if (planes >= 10) {
     if (!overloaded_state) {
@@ -69,12 +81,17 @@ void Traffic(int signum) {
       printf("[ground] Traffic: added %d planes (before=%d after=%d)\n", add, before, planes);
       fflush(stdout);
       // send SIGUSR2 to radio so radio forwards to air_control
-      if (sh_memory && sh_memory[1] > 0) {
+      if (sigusr2_sent < 4 && sh_memory && sh_memory[1] > 0) {
         printf("[ground] sending SIGUSR2 to radio pid=%d\n", sh_memory[1]);
         fflush(stdout);
         kill(sh_memory[1], SIGUSR2);
-      } else {
+        sigusr2_sent++;
+      } else if (!(sh_memory && sh_memory[1] > 0)) {
         printf("[ground] no radio pid in shm to send SIGUSR2 (sh_memory[1]=%d)\n", sh_memory ? sh_memory[1] : 0);
+        fflush(stdout);
+      } else {
+        // Reached max number of SIGUSR2 sends; do not notify radio further
+        printf("[ground] max SIGUSR2 sends reached (%d), not notifying radio\n", sigusr2_sent);
         fflush(stdout);
       }
     }
