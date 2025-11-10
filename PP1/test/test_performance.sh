@@ -228,11 +228,13 @@ if [ $PERCENTAGE -ge 98 ]; then
     echo -e "${GREEN} Tests passed: $PASSED_TESTS/$TOTAL_TESTS"
     echo -e "${GREEN} Percentage: $PERCENTAGE%"
     echo "EXCELLENT! Business rules work correctly"
+    echo -e "${NC}"
     exit 0
 elif [ $PERCENTAGE -ge 80 ]; then
     echo -e "${YELLOW} Tests passed: $PASSED_TESTS/$TOTAL_TESTS"
     echo -e "${YELLOW} Percentage: $PERCENTAGE%"
     echo "⚠️  REGULAR - Some rules need adjustments"
+    echo -e "${NC}"
     exit 1
 else
     echo -e "${RED} Tests passed: $PASSED_TESTS/$TOTAL_TESTS"
